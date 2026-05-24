@@ -7,7 +7,7 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_KEY&libraries=clusterer"></script>
+<script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_KEY&libraries=clusterer"></script>
 
 <style>
 body{margin:0;background:#0f172a;color:#fff;font-family:Pretendard}
@@ -119,93 +119,95 @@ th{background:#334155}
 <script>
 
 /* =========================
-   1. 전역 변수
+   1. 전역
 ========================= */
 
 const API_KEY = "YOUR_API_KEY";
 
-let sidoData = [];
-let sigunguData = [];
-let dongData = [];
+let sidoList = [];
+let sigunguList = [];
+let dongList = [];
 
-let selectedSido = "";
-let selectedSigungu = "";
+let chart;
+let map;
 
 /* =========================
-   2. 시도 로딩
-   (행정구역 API)
+   2. 전국 시도 로딩 (핵심)
 ========================= */
 
 async function loadSido(){
 
-const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=0000000000`;
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&pageNo=1&numOfRows=100`;
 
 const res = await fetch(url);
 const json = await res.json();
 
 const rows = json.StanReginCd[1].row;
 
-// 시도만 필터
-sidoData = rows.filter(i => i.sggCd === "00000");
+// 시도만 필터 (sggCd = 00000)
+sidoList = rows.filter(i => i.sggCd === "00000");
 
 const sido = document.getElementById("sido");
 sido.innerHTML = "";
 
-sidoData.forEach(s=>{
+sidoList.forEach(s=>{
 sido.innerHTML += `<option value="${s.sidoCd}">${s.sidoNm}</option>`;
 });
 
-selectedSido = sidoData[0].sidoCd;
-loadSigungu(selectedSido);
+loadSigungu(sidoList[0].sidoCd);
 }
 
 /* =========================
-   3. 시군구 로딩
+   3. 시군구 로딩 (핵심)
 ========================= */
 
 async function loadSigungu(sidoCd){
 
-const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=${sidoCd}`;
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&pageNo=1&numOfRows=500`;
 
 const res = await fetch(url);
 const json = await res.json();
 
-sigunguData = json.StanReginCd[1].row;
+const rows = json.StanReginCd[1].row;
+
+// 해당 시도만 필터
+sigunguList = rows.filter(i => i.sidoCd === sidoCd && i.sggCd !== "00000");
 
 const sigungu = document.getElementById("sigungu");
 sigungu.innerHTML = "";
 
-sigunguData.forEach(g=>{
+sigunguList.forEach(g=>{
 sigungu.innerHTML += `<option value="${g.sggCd}">${g.sggNm}</option>`;
 });
 
-selectedSigungu = sigunguData[0].sggCd;
-loadDong(selectedSigungu);
+loadDong(sigunguList[0].sggCd);
 }
 
 /* =========================
-   4. 동 로딩
+   4. 동 로딩 (핵심)
 ========================= */
 
 async function loadDong(sggCd){
 
-const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=${sggCd}`;
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&pageNo=1&numOfRows=1000`;
 
 const res = await fetch(url);
 const json = await res.json();
 
-dongData = json.StanReginCd[1].row;
+const rows = json.StanReginCd[1].row;
+
+dongList = rows.filter(i => i.sggCd === sggCd);
 
 const dong = document.getElementById("dong");
 dong.innerHTML = "";
 
-dongData.forEach(d=>{
+dongList.forEach(d=>{
 dong.innerHTML += `<option value="${d.admCd}">${d.admNm}</option>`;
 });
 }
 
 /* =========================
-   5. 이벤트 연결
+   5. 이벤트
 ========================= */
 
 document.getElementById("sido").addEventListener("change",e=>{
@@ -234,7 +236,7 @@ let items = json.response.body.items.item;
 const keyword = document.getElementById("apt").value;
 
 if(keyword){
-items = items.filter(i=>i.aptNm.includes(keyword));
+items = items.filter(i => i.aptNm.includes(keyword));
 }
 
 render(items);
@@ -243,9 +245,6 @@ render(items);
 /* =========================
    7. 렌더링
 ========================= */
-
-let chart;
-let map;
 
 function render(items){
 
@@ -292,6 +291,10 @@ level:6
 });
 
 }
+
+/* =========================
+   시작
+========================= */
 
 loadSido();
 
