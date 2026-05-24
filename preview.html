@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>전국 부동산 실거래가 검색기</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_KEY&libraries=clusterer"></script>
+
+<style>
+body{margin:0;background:#0f172a;color:#fff;font-family:Pretendard}
+.wrap{max-width:1200px;margin:auto;padding:20px}
+
+.header{background:#1e293b;padding:20px;border-radius:16px}
+h1{margin:0 0 10px}
+
+.search{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:10px;
+}
+
+select,input,button{
+padding:12px;
+border-radius:10px;
+border:none;
+font-size:14px;
+}
+
+button{
+background:#2563eb;
+color:#fff;
+font-weight:700;
+cursor:pointer;
+}
+
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+margin-top:20px;
+}
+
+.card{
+background:#1e293b;
+padding:20px;
+border-radius:16px;
+}
+
+#map{height:400px;border-radius:12px}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #334155;
+text-align:center;
+}
+
+th{background:#334155}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+<div class="header">
+<h1>🏠 전국 부동산 실거래가 검색기</h1>
+
+<div class="search">
+<select id="sido"></select>
+<select id="sigungu"></select>
+<select id="dong"></select>
+<input id="apt" placeholder="아파트명 검색">
+<button onclick="search()">검색</button>
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h3>📍 지도</h3>
+<div id="map"></div>
+</div>
+
+<div class="card">
+<h3>📈 거래 차트</h3>
+<canvas id="chart"></canvas>
+</div>
+
+</div>
+
+<div class="card">
+<h3>💰 실거래 목록</h3>
+<table>
+<thead>
+<tr>
+<th>아파트</th>
+<th>가격</th>
+<th>면적</th>
+<th>층</th>
+<th>날짜</th>
+</tr>
+</thead>
+<tbody id="list"></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+
+/* =========================
+   1. 전역 변수
+========================= */
+
+const API_KEY = "YOUR_API_KEY";
+
+let sidoData = [];
+let sigunguData = [];
+let dongData = [];
+
+let selectedSido = "";
+let selectedSigungu = "";
+
+/* =========================
+   2. 시도 로딩
+   (행정구역 API)
+========================= */
+
+async function loadSido(){
+
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=0000000000`;
+
+const res = await fetch(url);
+const json = await res.json();
+
+const rows = json.StanReginCd[1].row;
+
+// 시도만 필터
+sidoData = rows.filter(i => i.sggCd === "00000");
+
+const sido = document.getElementById("sido");
+sido.innerHTML = "";
+
+sidoData.forEach(s=>{
+sido.innerHTML += `<option value="${s.sidoCd}">${s.sidoNm}</option>`;
+});
+
+selectedSido = sidoData[0].sidoCd;
+loadSigungu(selectedSido);
+}
+
+/* =========================
+   3. 시군구 로딩
+========================= */
+
+async function loadSigungu(sidoCd){
+
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=${sidoCd}`;
+
+const res = await fetch(url);
+const json = await res.json();
+
+sigunguData = json.StanReginCd[1].row;
+
+const sigungu = document.getElementById("sigungu");
+sigungu.innerHTML = "";
+
+sigunguData.forEach(g=>{
+sigungu.innerHTML += `<option value="${g.sggCd}">${g.sggNm}</option>`;
+});
+
+selectedSigungu = sigunguData[0].sggCd;
+loadDong(selectedSigungu);
+}
+
+/* =========================
+   4. 동 로딩
+========================= */
+
+async function loadDong(sggCd){
+
+const url = `https://apis.data.go.kr/1741000/StanReginCd/getStanReginCdList?serviceKey=${API_KEY}&type=json&sggCd=${sggCd}`;
+
+const res = await fetch(url);
+const json = await res.json();
+
+dongData = json.StanReginCd[1].row;
+
+const dong = document.getElementById("dong");
+dong.innerHTML = "";
+
+dongData.forEach(d=>{
+dong.innerHTML += `<option value="${d.admCd}">${d.admNm}</option>`;
+});
+}
+
+/* =========================
+   5. 이벤트 연결
+========================= */
+
+document.getElementById("sido").addEventListener("change",e=>{
+loadSigungu(e.target.value);
+});
+
+document.getElementById("sigungu").addEventListener("change",e=>{
+loadDong(e.target.value);
+});
+
+/* =========================
+   6. 실거래 검색
+========================= */
+
+async function search(){
+
+const sigunguCode = document.getElementById("sigungu").value;
+
+const url = `https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade?serviceKey=${API_KEY}&LAWD_CD=${sigunguCode}&DEAL_YMD=202605&numOfRows=50&pageNo=1&_type=json`;
+
+const res = await fetch(url);
+const json = await res.json();
+
+let items = json.response.body.items.item;
+
+const keyword = document.getElementById("apt").value;
+
+if(keyword){
+items = items.filter(i=>i.aptNm.includes(keyword));
+}
+
+render(items);
+}
+
+/* =========================
+   7. 렌더링
+========================= */
+
+let chart;
+let map;
+
+function render(items){
+
+let html="";
+
+items.forEach(i=>{
+html += `
+<tr>
+<td>${i.aptNm}</td>
+<td>${i.dealAmount}만원</td>
+<td>${i.excluUseAr}</td>
+<td>${i.floor}</td>
+<td>${i.dealYear}-${i.dealMonth}-${i.dealDay}</td>
+</tr>`;
+});
+
+document.getElementById("list").innerHTML = html;
+
+if(chart) chart.destroy();
+
+chart = new Chart(document.getElementById("chart"),{
+type:"line",
+data:{
+labels:items.map(i=>i.dealDay),
+datasets:[{
+label:"실거래가",
+data:items.map(i=>Number(i.dealAmount.replace(",","")))
+}]
+}
+});
+
+initMap();
+}
+
+/* =========================
+   8. 지도
+========================= */
+
+function initMap(){
+
+map = new kakao.maps.Map(document.getElementById("map"),{
+center:new kakao.maps.LatLng(37.5665,126.9780),
+level:6
+});
+
+}
+
+loadSido();
+
+</script>
+
+</body>
+</html>
